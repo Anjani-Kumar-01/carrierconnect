@@ -14,10 +14,10 @@ exports.signUp = async (req, res) => {
       password,
       confirmPassword,
       accountType,
-      otp, // ✅ lowercase here
+
     } = req.body;
 
-    if (!firstName || !lastName || !email || !password || !confirmPassword || !otp) {
+    if (!firstName || !lastName || !email || !password || !confirmPassword || !accountType ) {
       return res.status(403).json({
         success: false,
         message: "All fields are required",
@@ -39,21 +39,7 @@ exports.signUp = async (req, res) => {
       });
     }
 
-    // Validate OTP
-    const recentOtpEntry = await OTP.find({ email }).sort({ createdAt: -1 }).limit(1);
-    if (recentOtpEntry.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "OTP not found",
-      });
-    }
-
-    if (recentOtpEntry[0].otp !== otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid OTP",
-      });
-    }
+ 
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -146,6 +132,6 @@ exports.login = async (req,res)=>{
 
    }
 };
-//change password
+
 
 
