@@ -17,6 +17,6 @@ const CompanySchema = new mongoose.Schema({
     location:{
         String
     }
-})
+});
 
 module.exports = mongoose.module("Comapany", CompanySchema)
