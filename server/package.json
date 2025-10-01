@@ -15,9 +15,11 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "mailsender": "^1.1.2",
     "mongoose": "^8.18.3",
     "mongose": "^0.0.2-security",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "otp-generator": "^4.0.1"
   },
   "description": ""
 }

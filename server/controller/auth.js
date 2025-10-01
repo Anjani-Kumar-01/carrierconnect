@@ -1,14 +1,67 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const JWT = require("jsonwebtoken");
+const OTP = require("../models/OTP");
+const otpgenerator = require("otp-generator");
 require("dotenv").config();
+
+exports.sendotp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Check if user already exists
+    const checkUserPresent = await User.findOne({ email });
+    if (checkUserPresent) {
+      return res.status(401).json({
+        success: false,
+        message: "User already exist",
+      });
+    }
+
+    // Generate OTP
+    let otp = otpgenerator.generate(6, {
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+    console.log("OTP generated:", otp);
+
+    // Ensure uniqueness
+    let existingOtp = await OTP.findOne({ otp });
+    while (existingOtp) {
+      otp = otpgenerator.generate(6, {
+        upperCaseAlphabets: false,
+        lowerCaseAlphabets: false,
+        specialChars: false,
+      });
+      existingOtp = await OTP.findOne({ otp });
+    }
+
+    // Save OTP
+    const otpPayload = { email, otp };
+    await OTP.create(otpPayload);
+
+    // Return response
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+      otp, 
+    });
+  } catch (error) {
+    console.error("SEND OTP ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+    });
+  }
+};
 
 // Signup
 exports.signUp = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, confirmPassword ,accountType} = req.body;
+    const {Name, email, password, confirmPassword ,otp,accountType} = req.body;
 
-    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+    if (!Name || !email || !password || !confirmPassword || !accountType || !otp) {
       return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
@@ -24,12 +77,11 @@ exports.signUp = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      firstName,
-      lastName,
+      Name,
       email,
       password: hashedPassword,
       accountType,
-      image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName} ${lastName}`,
+      image: `https://api.dicebear.com/5.x/initials/svg?seed=${Name}`,
     });
 
     return res.status(201).json({

@@ -1,40 +1,49 @@
 const mongoose = require("mongoose");
-// const mailSender = require("../utils/mailSender");
-const OTPschema = mongoose.Schema({
-    email:{
-        type:String,
-        require:true,
-    },
-    otp:{
-        type:String,
-        require:true,
+const mailSender = require("../utils/mailsender"); 
 
-    },
-    createdAt:{
-        type:Date,
-        default:Date.now(),
-        expires: 5*60,
-    }
+const otpSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+  },
+  otp: {
+    type: String,
+    required: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    expires: 300,
+  },
 });
 
+async function sendVerificationEmail(email, otp) {
+  try {
+    const mailResponse = await mailSender(
+      email,
+      "Carrier Connect - Email Verification",
+      `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
+          <h2 style="color: #333;">Welcome to <span style="color: #007BFF;">Carrier Connect 🚀</span></h2>
+          <p style="font-size: 16px; color: #555;">Your OTP is:</p>
+          <h1 style="color: #007BFF; letter-spacing: 4px;">${otp}</h1>
+          <p style="font-size: 14px; color: #777;">⚠️ This OTP is valid for <strong>5 minutes</strong>.</p>
+        </div>
+      `
+    );
 
-//email sender
-async function sendVerificationEmail(email,otp) {
-    try{
-     const mailResponse = await mailSender(email,"verification email from study nation",otp);
-     console.log("email sent sucessfully", mailResponse);
-    }
-    catch(error){
-        console.log("error occured while sending mail",error);
-        throw error;
-       
-    }
+    console.log(`📨 Verification email sent to ${email} | Message ID: ${mailResponse.messageId}`);
+  } catch (error) {
+    console.error(`Error sending verification email to ${email}:`, error.message);
+    throw error;
+  }
 }
 
-OTPschema.pre("save",async function (next) {
+otpSchema.pre("save", async function (next) {
+  if (this.isNew) {
     await sendVerificationEmail(this.email, this.otp);
-    next();
-    
-})
+  }
+  next();
+});
 
-module.exports = mongoose.model("OTP",OTPschema);
+module.exports = mongoose.model("OTP", otpSchema);
