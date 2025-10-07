@@ -5,9 +5,9 @@ const CompanySchema = new mongoose.Schema({
         type: String, 
         required: true 
     },
-    logo:{
-        type:String
-    },
+    // logo:{
+    //     type:String
+    // },
     description:{
         type:String
     },
