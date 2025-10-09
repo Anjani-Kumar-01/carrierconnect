@@ -1,21 +1,26 @@
 const User = require("../models/User");
+const OTP = require("../models/OTP");
 const bcrypt = require("bcrypt");
 const JWT = require("jsonwebtoken");
-const OTP = require("../models/OTP");
 const otpgenerator = require("otp-generator");
 require("dotenv").config();
 
-exports.sendotp = async (req, res) => {
+const JobProvider = require("../models/JobProvider");
+const Jobseeker = require("../models/Jobseeker");
+
+// Send OTP
+exports.sendOtp = async (req, res) => {
   try {
     const { email } = req.body;
 
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
     // Check if user already exists
-    const checkUserPresent = await User.findOne({ email });
-    if (checkUserPresent) {
-      return res.status(401).json({
-        success: false,
-        message: "User already exist",
-      });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "User already exists" });
     }
 
     // Generate OTP
@@ -24,34 +29,31 @@ exports.sendotp = async (req, res) => {
       lowerCaseAlphabets: false,
       specialChars: false,
     });
-    console.log("OTP generated:", otp);
+
+    console.log("Generated OTP:", otp);
 
     // Ensure uniqueness
-    let existingOtp = await OTP.findOne({ otp });
-    while (existingOtp) {
+    while (await OTP.findOne({ otp })) {
       otp = otpgenerator.generate(6, {
         upperCaseAlphabets: false,
         lowerCaseAlphabets: false,
         specialChars: false,
       });
-      existingOtp = await OTP.findOne({ otp });
     }
 
     // Save OTP
-    const otpPayload = { email, otp };
-    await OTP.create(otpPayload);
+    await OTP.create({ email, otp });
 
-    // Return response
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
-      otp, 
+      otp, // ❗ Remove this in production (only for testing)
     });
   } catch (error) {
     console.error("SEND OTP ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: "Something went wrong",
+      message: "Internal server error",
     });
   }
 };
@@ -59,7 +61,7 @@ exports.sendotp = async (req, res) => {
 // Signup
 exports.signUp = async (req, res) => {
   try {
-    const {Name, email, password, confirmPassword ,otp,accountType} = req.body;
+    const { Name, email, password, confirmPassword, otp, accountType, description, location, website } = req.body;
 
     if (!Name || !email || !password || !confirmPassword || !accountType || !otp) {
       return res.status(400).json({ success: false, message: "All fields are required" });
@@ -69,29 +71,57 @@ exports.signUp = async (req, res) => {
       return res.status(400).json({ success: false, message: "Passwords do not match" });
     }
 
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: "User already registered" });
     }
 
+    // Verify OTP
+    const recentOtp = await OTP.findOne({ email }).sort({ createdAt: -1 });
+    if (!recentOtp || recentOtp.otp !== otp) {
+      return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+    }
+
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await User.create({
-      Name,
-      email,
-      password: hashedPassword,
-      accountType,
-      image: `https://api.dicebear.com/5.x/initials/svg?seed=${Name}`,
-    });
+    let newUser;
+
+    // Create user based on role
+    if (accountType === "Job-Provider") {
+      newUser = new JobProvider({
+        Name,
+        email,
+        password: hashedPassword,
+        accountType,
+        image: `https://api.dicebear.com/5.x/initials/svg?seed=${Name}`,
+        description,
+        location,
+        website,
+      });
+    } else if (accountType === "Jobseeker") {
+      newUser = new Jobseeker({
+        Name,
+        email,
+        password: hashedPassword,
+        accountType,
+        image: `https://api.dicebear.com/5.x/initials/svg?seed=${Name}`,
+      });
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid account type" });
+    }
+
+    await newUser.save();
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
-      user,
+      user: newUser,
     });
   } catch (error) {
     console.error("SIGNUP ERROR:", error);
-    return res.status(500).json({ success: false, message: "Something went wrong" });
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -101,46 +131,28 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required",
-      });
+      return res.status(400).json({ success: false, message: "Email and password are required" });
     }
 
     const user = await User.findOne({ email }).populate("additionalDetails");
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User does not exist",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Incorrect password",
-      });
+      return res.status(401).json({ success: false, message: "Incorrect password" });
     }
 
-    // Check if JWT_SECRET is set
     if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET is not defined in environment variables");
-      return res.status(500).json({
-        success: false,
-        message: "Server configuration error",
-      });
+      console.error("Missing JWT_SECRET in environment");
+      return res.status(500).json({ success: false, message: "Server configuration error" });
     }
 
-    // Create JWT payload
-    const payload = {
-      email: user.email,
-      id: user._id,
-      accountType: user.accountType,
-    };
-
-    // Sign token
+    // Generate JWT
+    const payload = { email: user.email, id: user._id, accountType: user.accountType };
     const token = JWT.sign(payload, process.env.JWT_SECRET, { expiresIn: "2h" });
+
     user.token = token;
     user.password = undefined;
 
@@ -159,12 +171,10 @@ exports.login = async (req, res) => {
     console.error("LOGIN ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Something went wrong",
-      error: error.message,
+      message: "Internal server error",
     });
   }
 };
-
 
 // Change Password
 exports.changePassword = async (req, res) => {
@@ -177,7 +187,7 @@ exports.changePassword = async (req, res) => {
     }
 
     if (password !== confirmPassword) {
-      return res.status(400).json({ success: false, message: "New passwords do not match" });
+      return res.status(400).json({ success: false, message: "Passwords do not match" });
     }
 
     const user = await User.findById(userId);
@@ -192,7 +202,7 @@ exports.changePassword = async (req, res) => {
     return res.status(200).json({ success: true, message: "Password changed successfully" });
   } catch (error) {
     console.error("CHANGE PASSWORD ERROR:", error);
-    return res.status(500).json({ success: false, message: "Something went wrong" });
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -206,6 +216,7 @@ exports.getProfile = async (req, res) => {
     return res.status(200).json({ success: true, user });
   } catch (error) {
     console.error("GET PROFILE ERROR:", error);
-    return res.status(500).json({ success: false, message: "Something went wrong" });
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
