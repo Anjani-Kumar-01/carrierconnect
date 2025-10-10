@@ -41,7 +41,7 @@ exports.sendOtp = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "OTP generated and sent successfully",
-      otp, // ⚠️ Only for testing
+      otp, 
     });
   } catch (error) {
     console.error("SEND OTP ERROR:", error);
@@ -101,7 +101,7 @@ exports.signUp = async (req, res) => {
 
     let newUser;
 
-    // Create user based on account type
+    // Create user 
     if (accountType === "Job-Provider") {
       newUser = new JobProvider({
         Name,
@@ -124,8 +124,6 @@ exports.signUp = async (req, res) => {
     } else {
       return res.status(400).json({ success: false, message: "Invalid account type" });
     }
-
-    // Save user
     await newUser.save();
 
     // Remove used OTP
